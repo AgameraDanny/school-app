@@ -20,7 +20,7 @@ public class SchoolController {
     @Autowired
     private StudentRepository studentRepository;
 
-    // 1. Get all schools (and their students via relationship)
+    // 1. Get all schools
     @GetMapping("/schools")
     public List<School> getAllSchools() {
         return schoolRepository.findAll();
@@ -39,5 +39,25 @@ public class SchoolController {
             student.setSchool(school);
             return ResponseEntity.ok(studentRepository.save(student));
         }).orElse(ResponseEntity.notFound().build());
+    }
+
+    // 4. DELETE SCHOOL (This will automatically delete associated students due to CascadeType.ALL)
+    @DeleteMapping("/schools/{id}")
+    public ResponseEntity<?> deleteSchool(@PathVariable Long id) {
+        if (!schoolRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        schoolRepository.deleteById(id);
+        return ResponseEntity.ok().build();
+    }
+
+    // 5. DELETE STUDENT
+    @DeleteMapping("/students/{id}")
+    public ResponseEntity<?> deleteStudent(@PathVariable Long id) {
+        if (!studentRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        studentRepository.deleteById(id);
+        return ResponseEntity.ok().build();
     }
 }
