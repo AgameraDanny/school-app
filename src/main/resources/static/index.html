@@ -9,6 +9,29 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f4f6f8; color: #333; }
         h1, h2, h3 { color: #2c3e50; }
         
+        /* LOADING SPINNER OVERLAY */
+        #loaderOverlay {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .spinner {
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #007bff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
         /* Card Containers */
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; }
         
@@ -74,14 +97,20 @@
 </head>
 <body>
 
+    <!-- LOADING OVERLAY -->
+    <div id="loaderOverlay">
+        <div class="spinner"></div>
+        <h3>Processing...</h3>
+    </div>
+
     <h1 style="text-align: center; margin-bottom: 30px;">School & Student Manager</h1>
 
-    <!-- NEW: GLOBAL SEARCH BAR -->
+    <!-- GLOBAL SEARCH BAR -->
     <div class="search-container">
         <input type="text" id="globalSearch" class="search-input" placeholder="🔍 Search for a School or Student..." onkeyup="handleSearch()">
     </div>
 
-    <!-- NEW: STUDENT SEARCH RESULTS (Hidden by default) -->
+    <!-- STUDENT SEARCH RESULTS -->
     <div id="studentSearchResults">
         <h3>Student Search Results</h3>
         <div id="studentMatchesList"></div>
@@ -106,7 +135,7 @@
         <table id="schoolsTable">
             <thead>
                 <tr>
-                    <th class="num-col">#</th> <!-- Numbering Column -->
+                    <th class="num-col">#</th>
                     <th>School Name</th>
                     <th>Population</th>
                     <th class="action-col">Action</th>
@@ -151,13 +180,24 @@
 
         document.addEventListener('DOMContentLoaded', fetchSchools);
 
+        // --- LOADING INDICATOR FUNCTIONS ---
+        function showLoader() {
+            document.getElementById('loaderOverlay').style.display = 'flex';
+        }
+
+        function hideLoader() {
+            document.getElementById('loaderOverlay').style.display = 'none';
+        }
+
         async function fetchSchools() {
+            showLoader();
             try {
                 const response = await fetch(`${API_URL}/schools`);
+                if (!response.ok) throw new Error("Failed to fetch data");
                 currentSchoolsData = await response.json();
                 renderSchoolTable(currentSchoolsData);
                 
-                // Refresh logic for detailed view
+                // Refresh logic
                 const selectedId = document.getElementById('selectedSchoolId').value;
                 if(selectedId) {
                     const stillExists = currentSchoolsData.find(s => s.id == selectedId);
@@ -169,23 +209,25 @@
                 }
             } catch (error) {
                 console.error('Error fetching schools:', error);
+                alert("Error connecting to server. Please try again.");
+            } finally {
+                hideLoader();
             }
         }
 
-        // --- SEARCH LOGIC (NEW) ---
+        // --- SEARCH LOGIC ---
         function handleSearch() {
             const query = document.getElementById('globalSearch').value.toLowerCase();
             const studentResultsContainer = document.getElementById('studentSearchResults');
             const studentList = document.getElementById('studentMatchesList');
             
-            // 1. Filter Schools Table
-            // Only show schools where the name matches
+            // Filter Schools
             const filteredSchools = currentSchoolsData.filter(school => 
                 school.name.toLowerCase().includes(query)
             );
             renderSchoolTable(filteredSchools);
 
-            // 2. Search for Students across ALL schools
+            // Filter Students
             if(query.length > 0) {
                 const studentMatches = [];
                 currentSchoolsData.forEach(school => {
@@ -196,7 +238,6 @@
                     });
                 });
 
-                // Display Student Results
                 if(studentMatches.length > 0) {
                     studentResultsContainer.style.display = 'block';
                     studentList.innerHTML = studentMatches.map(s => `
@@ -224,7 +265,6 @@
             const tbody = document.getElementById('schoolsTableBody');
             tbody.innerHTML = '';
 
-            // Using index + 1 for the School Numbering System
             schools.forEach((school, index) => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -251,16 +291,15 @@
             document.getElementById('selectedSchoolId').value = school.id;
             document.getElementById('selectedSchoolTitle').innerText = `Manage: ${school.name}`;
 
-            // --- SORTING LOGIC (Highest Grade First) ---
+            // Sort & Rank
             const passed = school.students
                 .filter(s => s.grade > 50)
-                .sort((a, b) => b.grade - a.grade); // Descending order
+                .sort((a, b) => b.grade - a.grade);
             
             const failed = school.students
                 .filter(s => s.grade <= 50)
-                .sort((a, b) => b.grade - a.grade); // Descending order (highest fail at top)
+                .sort((a, b) => b.grade - a.grade);
 
-            // --- RANKING LOGIC (Using Index + 1) ---
             const generateList = (list, badgeClass) => list.map((s, index) => `
                 <li>
                     <div class="student-info">
@@ -283,20 +322,27 @@
             }
         }
 
-        // --- API ACTIONS (Unchanged mostly) ---
+        // --- API ACTIONS (NOW WITH LOADING FEEDBACK) ---
 
         async function addSchool() {
             const name = document.getElementById('schoolName').value;
             const population = document.getElementById('schoolPop').value;
             if(!name || !population) return alert("Fill all fields");
 
-            await fetch(`${API_URL}/schools`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, population })
-            });
-            cancelSchoolEdit();
-            fetchSchools();
+            showLoader();
+            try {
+                await fetch(`${API_URL}/schools`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, population })
+                });
+                cancelSchoolEdit();
+                // We await fetchSchools here so the loader stays up until the table refreshes
+                await fetchSchools(); 
+            } catch(e) { 
+                console.error(e); 
+                hideLoader(); 
+            }
         }
 
         function startEditSchool(id) {
@@ -316,13 +362,20 @@
             const id = document.getElementById('editSchoolId').value;
             const name = document.getElementById('schoolName').value;
             const population = document.getElementById('schoolPop').value;
-            await fetch(`${API_URL}/schools/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, population })
-            });
-            cancelSchoolEdit();
-            fetchSchools();
+
+            showLoader();
+            try {
+                await fetch(`${API_URL}/schools/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, population })
+                });
+                cancelSchoolEdit();
+                await fetchSchools();
+            } catch(e) { 
+                console.error(e); 
+                hideLoader();
+            }
         }
 
         function cancelSchoolEdit() {
@@ -337,8 +390,14 @@
 
         async function deleteSchool(id) {
             if(!confirm("Delete this school and all students?")) return;
-            await fetch(`${API_URL}/schools/${id}`, { method: 'DELETE' });
-            fetchSchools();
+            showLoader();
+            try {
+                await fetch(`${API_URL}/schools/${id}`, { method: 'DELETE' });
+                await fetchSchools();
+            } catch(e) {
+                console.error(e);
+                hideLoader();
+            }
         }
 
         async function addStudent() {
@@ -347,13 +406,19 @@
             const grade = document.getElementById('studentGrade').value;
             if(!name || !grade) return alert("Fill all fields");
 
-            await fetch(`${API_URL}/schools/${schoolId}/students`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, grade })
-            });
-            cancelStudentEdit();
-            fetchSchools();
+            showLoader();
+            try {
+                await fetch(`${API_URL}/schools/${schoolId}/students`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, grade })
+                });
+                cancelStudentEdit();
+                await fetchSchools();
+            } catch(e) {
+                console.error(e);
+                hideLoader();
+            }
         }
 
         function startEditStudent(id, name, grade) {
@@ -371,13 +436,20 @@
             const id = document.getElementById('editStudentId').value;
             const name = document.getElementById('studentName').value;
             const grade = document.getElementById('studentGrade').value;
-            await fetch(`${API_URL}/students/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, grade })
-            });
-            cancelStudentEdit();
-            fetchSchools();
+
+            showLoader();
+            try {
+                await fetch(`${API_URL}/students/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, grade })
+                });
+                cancelStudentEdit();
+                await fetchSchools();
+            } catch(e) {
+                console.error(e);
+                hideLoader();
+            }
         }
 
         function cancelStudentEdit() {
@@ -392,8 +464,14 @@
 
         async function deleteStudent(id) {
             if(!confirm("Delete student?")) return;
-            await fetch(`${API_URL}/students/${id}`, { method: 'DELETE' });
-            fetchSchools();
+            showLoader();
+            try {
+                await fetch(`${API_URL}/students/${id}`, { method: 'DELETE' });
+                await fetchSchools();
+            } catch(e) {
+                console.error(e);
+                hideLoader();
+            }
         }
     </script>
 </body>
